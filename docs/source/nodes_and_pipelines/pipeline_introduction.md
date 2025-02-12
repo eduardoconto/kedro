@@ -226,8 +226,8 @@ The first node captures the relationship of how to calculate `y` from `x` and th
 try:
     pipeline(
         [
-            node(lambda x: x + 1, "x", "y", name="first node"),
-            node(lambda y: y - 1, "y", "x", name="second node"),
+            node(lambda x: x + 1, "x", "y", name="first_node"),
+            node(lambda y: y - 1, "y", "x", name="second_node"),
         ]
     )
 except Exception as e:
@@ -237,7 +237,7 @@ except Exception as e:
 The output is as follows:
 
 ```console
-Circular dependencies exist among these items: ['first node: <lambda>([x]) -> [y]', 'second node: <lambda>([y]) -> [x]']
+Circular dependencies exist among these items: ['first_node: <lambda>([x]) -> [y]', 'second_node: <lambda>([y]) -> [x]']
 ```
 
 ### Pipeline nodes named with the dot notation
