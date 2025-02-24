@@ -57,10 +57,11 @@ If the built-in Kedro runners do not meet your requirements, you can also define
 
 ```python
 # in src/<package_name>/runner.py
-from kedro.io import AbstractDataset, DataCatalog, MemoryDataset
+from kedro.io import AbstractDataset, CatalogProtocol, MemoryDataset
 from kedro.pipeline import Pipeline
 from kedro.runner.runner import AbstractRunner
 from pluggy import PluginManager
+from typing import Any
 
 
 class DryRunner(AbstractRunner):
@@ -81,13 +82,25 @@ class DryRunner(AbstractRunner):
         """
         return MemoryDataset()
 
+    def _get_executor(self, max_workers):
+        pass
+
     def _run(
         self,
         pipeline: Pipeline,
-        catalog: DataCatalog,
-        hook_manager: PluginManager = None,
-        session_id: str = None,
+        catalog: CatalogProtocol,
+        hook_manager: PluginManager | None = None,
+        session_id: str | None = None,
     ) -> None:
+        pass
+
+    def run(
+        self,
+        pipeline: Pipeline,
+        catalog: CatalogProtocol,
+        hook_manager: PluginManager | None = None,
+        session_id: str | None = None,
+    ) -> dict[str, Any]:
         """The method implementing dry pipeline running.
         Example logs output using this implementation:
 
