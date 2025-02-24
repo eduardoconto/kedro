@@ -178,6 +178,7 @@ def pipeline(  # noqa: PLR0913
     parameters: str | set[str] | dict[str, str] | None = None,
     tags: str | Iterable[str] | None = None,
     namespace: str | None = None,
+    feedback: dict | None = None
 ) -> Pipeline:
     r"""Create a ``Pipeline`` from a collection of nodes and/or ``Pipeline``\s.
 
@@ -225,9 +226,9 @@ def pipeline(  # noqa: PLR0913
     """
     if isinstance(pipe, Pipeline):
         # To ensure that we are always dealing with a *copy* of pipe.
-        pipe = Pipeline([pipe], tags=tags)
+        pipe = Pipeline([pipe], tags=tags, feedback=feedback)
     else:
-        pipe = Pipeline(pipe, tags=tags)
+        pipe = Pipeline(pipe, tags=tags, feedback=feedback)
 
     if not any([inputs, outputs, parameters, namespace]):
         return pipe

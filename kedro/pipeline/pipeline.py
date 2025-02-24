@@ -64,6 +64,7 @@ class Pipeline:
         nodes: Iterable[Node | Pipeline],
         *,
         tags: str | Iterable[str] | None = None,
+        feedback: dict | None = None
     ):
         """Initialise ``Pipeline`` with a list of ``Node`` instances.
 
@@ -73,6 +74,7 @@ class Pipeline:
                 be expanded and all their nodes will become part of this
                 new pipeline.
             tags: Optional set of tags to be applied to all the pipeline nodes.
+            feedback: Optional dictionary to provide feedback on the pipeline.
 
         Raises:
             ValueError:
@@ -127,6 +129,7 @@ class Pipeline:
         _validate_transcoded_inputs_outputs(nodes_chain)
         _tags = set(_to_list(tags))
 
+
         if _tags:
             tagged_nodes = [n.tag(_tags) for n in nodes_chain]
         else:
@@ -162,6 +165,16 @@ class Pipeline:
         self._toposorted_nodes: list[Node] = []
         self._toposorted_groups: list[list[Node]] = []
 
+        if feedback is not None and not isinstance(feedback, dict):
+            raise ValueError("'feedback' argument must be a dictionary if provided.")
+        if feedback is None:
+            feedback = {}
+        self._feedback = feedback
+
+    @property
+    def feedback(self) -> dict: 
+        return self._feedback
+    
     def __repr__(self) -> str:  # pragma: no cover
         """Pipeline ([node1, ..., node10 ...], name='pipeline_name')"""
         max_nodes_to_display = 10
@@ -171,13 +184,14 @@ class Pipeline:
             nodes_reprs.append("...")
         sep = ",\n"
         nodes_reprs_str = f"[\n{sep.join(nodes_reprs)}\n]" if nodes_reprs else "[]"
-        constructor_repr = f"({nodes_reprs_str})"
+        constructor_repr = f"({nodes_reprs_str}, feedback={self.feedback})" 
         return f"{self.__class__.__name__}{constructor_repr}"
 
     def __add__(self, other: Any) -> Pipeline:
         if not isinstance(other, Pipeline):
             return NotImplemented
-        return Pipeline(set(self._nodes + other._nodes))
+        return Pipeline(set(self._nodes + other._nodes), 
+                        feedback=self.feedback | other.feedback)
 
     def __radd__(self, other: Any) -> Pipeline:
         if isinstance(other, int) and other == 0:
@@ -187,17 +201,20 @@ class Pipeline:
     def __sub__(self, other: Any) -> Pipeline:
         if not isinstance(other, Pipeline):
             return NotImplemented
-        return Pipeline(set(self._nodes) - set(other._nodes))
+        return Pipeline(set(self._nodes) - set(other._nodes), 
+                        feedback=self.feedback & other.feedback)
 
     def __and__(self, other: Any) -> Pipeline:
         if not isinstance(other, Pipeline):
             return NotImplemented
-        return Pipeline(set(self._nodes) & set(other._nodes))
+        return Pipeline(set(self._nodes) & set(other._nodes), 
+                        feedback=self.feedback & other.feedback)
 
     def __or__(self, other: Any) -> Pipeline:
         if not isinstance(other, Pipeline):
             return NotImplemented
-        return Pipeline(set(self._nodes + other._nodes))
+        return Pipeline(set(self._nodes + other._nodes), 
+                        feedback=self.feedback | other.feedback)
 
     def all_inputs(self) -> set[str]:
         """All inputs for all nodes in the pipeline.
@@ -406,7 +423,7 @@ class Pipeline:
             )
 
         nodes = [self._nodes_by_name[name] for name in node_names]
-        return Pipeline(nodes)
+        return Pipeline(nodes, feedback=self.feedback)
 
     def only_nodes_with_namespace(self, node_namespace: str) -> Pipeline:
         """Creates a new ``Pipeline`` containing only nodes with the specified
@@ -430,7 +447,7 @@ class Pipeline:
             raise ValueError(
                 f"Pipeline does not contain nodes with namespace '{node_namespace}'"
             )
-        return Pipeline(nodes)
+        return Pipeline(nodes, feedback=self.feedback)
 
     def _get_nodes_with_inputs_transcode_compatible(
         self, datasets: set[str]
@@ -520,7 +537,7 @@ class Pipeline:
         starting = set(inputs)
         nodes = self._get_nodes_with_inputs_transcode_compatible(starting)
 
-        return Pipeline(nodes)
+        return Pipeline(nodes, feedback=self.feedback)
 
     def from_inputs(self, *inputs: str) -> Pipeline:
         """Create a new ``Pipeline`` object with the nodes which depend
@@ -560,7 +577,7 @@ class Pipeline:
                 )
             )
 
-        return Pipeline(result)
+        return Pipeline(result,feedback=self.feedback)
 
     def only_nodes_with_outputs(self, *outputs: str) -> Pipeline:
         """Create a new ``Pipeline`` object with the nodes which are directly
@@ -585,7 +602,7 @@ class Pipeline:
         starting = set(outputs)
         nodes = self._get_nodes_with_outputs_transcode_compatible(starting)
 
-        return Pipeline(nodes)
+        return Pipeline(nodes,feedback=self.feedback)
 
     def to_outputs(self, *outputs: str) -> Pipeline:
         """Create a new ``Pipeline`` object with the nodes which are directly
@@ -624,7 +641,7 @@ class Pipeline:
                 if _strip_transcoding(output) in self._nodes_by_output
             }
 
-        return Pipeline(result)
+        return Pipeline(result,feedback=self.feedback)
 
     def from_nodes(self, *node_names: str) -> Pipeline:
         """Create a new ``Pipeline`` object with the nodes which depend
@@ -683,7 +700,7 @@ class Pipeline:
         """
         unique_tags = set(tags)
         nodes = [node for node in self._nodes if unique_tags & node.tags]
-        return Pipeline(nodes)
+        return Pipeline(nodes,feedback=self.feedback)
 
     def filter(  # noqa: PLR0913
         self,
@@ -766,7 +783,7 @@ class Pipeline:
         # would give different outcomes depending on the order of filter methods:
         # only_nodes and then from_inputs would give node1, while only_nodes and then
         # from_inputs would give node1 and node3.
-        filtered_pipeline = Pipeline(self._nodes)
+        filtered_pipeline = Pipeline(self._nodes,feedback=self.feedback)
         for subset_pipeline in subset_pipelines:
             filtered_pipeline &= subset_pipeline
 
@@ -787,7 +804,7 @@ class Pipeline:
             New ``Pipeline`` object with nodes tagged.
         """
         nodes = [n.tag(tags) for n in self._nodes]
-        return Pipeline(nodes)
+        return Pipeline(nodes,feedback=self.feedback)
 
     def to_json(self) -> str:
         """Return a json representation of the pipeline."""

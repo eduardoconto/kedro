@@ -125,30 +125,41 @@ class AbstractRunner(ABC):
             self._logger.info(
                 "Asynchronous mode is enabled for loading and saving data"
             )
+        num_exec = 0
+        while True:
+            self._run(pipeline, catalog, hook_or_null_manager, session_id)  # type: ignore[arg-type]
+            num_exec += 1
+            self._logger.info(f"Pipeline execution {num_exec} completed successfully.")
 
-        self._run(pipeline, catalog, hook_or_null_manager, session_id)  # type: ignore[arg-type]
+            # Identify MemoryDataset in the catalog
+            memory_datasets = {
+                ds_name
+                for ds_name, ds in catalog._datasets.items()
+                if isinstance(ds, MemoryDataset) or isinstance(ds, SharedMemoryDataset)
+            }
 
-        self._logger.info("Pipeline execution completed successfully.")
+            # Check if there's any output datasets that aren't in the catalog and don't match a pattern
+            # in the catalog and include MemoryDataset.
+            free_outputs = pipeline.outputs() - (set(registered_ds) - memory_datasets)
 
-        # Identify MemoryDataset in the catalog
-        memory_datasets = {
-            ds_name
-            for ds_name, ds in catalog._datasets.items()
-            if isinstance(ds, MemoryDataset) or isinstance(ds, SharedMemoryDataset)
-        }
+            run_output = {ds_name: catalog.load(ds_name) for ds_name in free_outputs}
 
-        # Check if there's any output datasets that aren't in the catalog and don't match a pattern
-        # in the catalog and include MemoryDataset.
-        free_outputs = pipeline.outputs() - (set(registered_ds) - memory_datasets)
-
-        run_output = {ds_name: catalog.load(ds_name) for ds_name in free_outputs}
-
-        # Remove runtime patterns after run, so they do not affect further runs
-        if self._extra_dataset_patterns:
-            catalog.config_resolver.remove_runtime_patterns(
-                self._extra_dataset_patterns
-            )
-
+            # Remove runtime patterns after run, so they do not affect further runs
+            if self._extra_dataset_patterns:
+                catalog.config_resolver.remove_runtime_patterns(
+                    self._extra_dataset_patterns
+                )
+            
+            # EC: Save feedback result to the catalog
+            if pipeline.feedback:
+                for f in pipeline.feedback:
+                    catalog.save(f, catalog.load(pipeline.feedback[f]))
+                if "_stop" in run_output:
+                    if run_output["_stop"] == True:
+                        break
+            else:
+                break
+            
         return run_output
 
     def run_only_missing(
@@ -325,10 +336,14 @@ class AbstractRunner(ABC):
     ) -> None:
         """Decrement dataset load counts and release any datasets we've finished with"""
         for dataset in node.inputs:
+            if pipeline.feedback and dataset in pipeline.feedback.values():
+                continue
             load_counts[dataset] -= 1
             if load_counts[dataset] < 1 and dataset not in pipeline.inputs():
                 catalog.release(dataset)
         for dataset in node.outputs:
+            if pipeline.feedback and dataset in pipeline.feedback.values():
+                continue
             if load_counts[dataset] < 1 and dataset not in pipeline.outputs():
                 catalog.release(dataset)
 
