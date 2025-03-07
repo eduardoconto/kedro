@@ -165,6 +165,7 @@ class Pipeline:
         self._toposorted_nodes: list[Node] = []
         self._toposorted_groups: list[list[Node]] = []
 
+        # Support for a feedback argument
         if feedback is not None and not isinstance(feedback, dict):
             raise ValueError("'feedback' argument must be a dictionary if provided.")
         if feedback is None:
@@ -215,7 +216,20 @@ class Pipeline:
             return NotImplemented
         return Pipeline(set(self._nodes + other._nodes), 
                         feedback=self.feedback | other.feedback)
-
+    
+    def __call__(self, a):
+        from kedro.runner.sequential_runner import SequentialRunner
+        from kedro.io.data_catalog import DataCatalog
+        catalog = DataCatalog({}, {"x": 0})
+        runner = SequentialRunner()
+        ret = runner.run(self, catalog)
+        ret = [v for k, v in ret.items() if k != "_stop"]
+        if len(ret) == 1:
+            ret = ret[0]
+        return ret
+        #print(f"run pipe {a}")
+        #return 10 
+    
     def all_inputs(self) -> set[str]:
         """All inputs for all nodes in the pipeline.
 
@@ -823,6 +837,8 @@ class Pipeline:
         }
 
         return json.dumps(pipeline_versioned)
+    
+
 
 
 def _validate_duplicate_nodes(nodes_or_pipes: Iterable[Node | Pipeline]) -> None:
